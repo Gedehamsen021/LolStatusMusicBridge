@@ -66,5 +66,5 @@ The repo includes a workflow at `.github/workflows/release.yml`.
 - League of Legends must be open and logged in
 - The app uses the local League Client API and is not affiliated with Riot Games
 - The default config is Spotify-only, so browser videos like YouTube are ignored unless you change `allowedSourceApps`
-- The app can restore the old status on normal shutdown, but no app can guarantee restore after a hard kill from Task Manager or an IDE force stop
+- The app saves restore state locally and tries to recover your previous LoL status on the next start if a previous run closed badly
 - If your League installation is in a different folder, set `leagueLockfilePath`

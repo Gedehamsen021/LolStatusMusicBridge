@@ -5,22 +5,26 @@ internal sealed class MusicStatusBridge : IDisposable
     private readonly AppOptions _options;
     private readonly MusicSessionReader _musicSessionReader;
     private readonly LeagueClientStatusService _leagueClientStatusService;
+    private readonly StatusRestoreStateStore _stateStore;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private string? _lastAppliedStatusMessage;
     private string? _initialStatusMessage;
     private string? _lastTrackText;
     private bool _capturedInitialStatus;
     private bool _loggedLeagueReady;
+    private bool _recoveryAttempted;
     private bool _waitingForLeagueClient;
 
     public MusicStatusBridge(
         AppOptions options,
         MusicSessionReader musicSessionReader,
-        LeagueClientStatusService leagueClientStatusService)
+        LeagueClientStatusService leagueClientStatusService,
+        StatusRestoreStateStore stateStore)
     {
         _options = options;
         _musicSessionReader = musicSessionReader;
         _leagueClientStatusService = leagueClientStatusService;
+        _stateStore = stateStore;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -132,6 +136,12 @@ internal sealed class MusicStatusBridge : IDisposable
             _loggedLeagueReady = true;
         }
 
+        if (!_recoveryAttempted)
+        {
+            currentProfile = await TryRecoverPreviousSessionAsync(currentProfile, cancellationToken);
+            _recoveryAttempted = true;
+        }
+
         if (!_capturedInitialStatus)
         {
             _initialStatusMessage = currentProfile.StatusMessage;
@@ -167,6 +177,7 @@ internal sealed class MusicStatusBridge : IDisposable
         if (updated)
         {
             _lastAppliedStatusMessage = desiredStatusMessage;
+            PersistRestoreState(desiredStatusMessage);
             WriteLog($"Updated LoL status: {desiredStatusMessage}");
         }
     }
@@ -180,7 +191,8 @@ internal sealed class MusicStatusBridge : IDisposable
 
         var currentProfile = await _leagueClientStatusService.TryGetSelfAsync(cancellationToken);
         if (currentProfile is not null &&
-            string.Equals(currentProfile.StatusMessage, _lastAppliedStatusMessage, StringComparison.Ordinal))
+            (string.Equals(currentProfile.StatusMessage, _lastAppliedStatusMessage, StringComparison.Ordinal) ||
+             string.Equals(reason, "Application closed", StringComparison.Ordinal)))
         {
             var restoreValue = _initialStatusMessage ?? string.Empty;
             var restored = await _leagueClientStatusService.TrySetStatusMessageAsync(
@@ -198,10 +210,65 @@ internal sealed class MusicStatusBridge : IDisposable
                 {
                     WriteLog($"{reason}. Restored LoL status: {restoreValue}");
                 }
+
+                _stateStore.Clear();
             }
         }
 
         _lastAppliedStatusMessage = null;
+    }
+
+    private void PersistRestoreState(string lastAppliedStatusMessage)
+    {
+        if (!_capturedInitialStatus)
+        {
+            return;
+        }
+
+        _stateStore.Save(
+            new StatusRestoreState(
+                _initialStatusMessage ?? string.Empty,
+                lastAppliedStatusMessage));
+    }
+
+    private async Task<LeagueStatusSnapshot> TryRecoverPreviousSessionAsync(
+        LeagueStatusSnapshot currentProfile,
+        CancellationToken cancellationToken)
+    {
+        var pendingRestore = _stateStore.Load();
+        if (pendingRestore is null)
+        {
+            return currentProfile;
+        }
+
+        if (!string.Equals(
+                currentProfile.StatusMessage,
+                pendingRestore.LastAppliedStatusMessage,
+                StringComparison.Ordinal))
+        {
+            WriteLog("Found saved restore state, but the current LoL status no longer matches the previous app status. Skipping recovery.");
+            _stateStore.Clear();
+            return currentProfile;
+        }
+
+        var restored = await _leagueClientStatusService.TrySetStatusMessageAsync(
+            currentProfile,
+            pendingRestore.InitialStatusMessage,
+            cancellationToken);
+
+        if (!restored)
+        {
+            WriteLog("Found saved restore state, but could not restore the previous LoL status yet.");
+            return currentProfile;
+        }
+
+        _stateStore.Clear();
+        WriteLog("Recovered the previous LoL status from the last session.");
+
+        var refreshedProfile = await _leagueClientStatusService.TryGetSelfAsync(cancellationToken);
+        return refreshedProfile ?? new LeagueStatusSnapshot(
+            currentProfile.Payload,
+            pendingRestore.InitialStatusMessage);
     }
 
     private string BuildStatusMessage(PlaybackTrack track)

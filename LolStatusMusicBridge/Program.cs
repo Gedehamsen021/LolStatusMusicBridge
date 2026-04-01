@@ -2,10 +2,12 @@ using LolStatusMusicBridge;
 using System.Threading;
 
 var options = AppOptions.Load();
+var stateStore = new StatusRestoreStateStore();
 using var bridge = new MusicStatusBridge(
     options,
     new MusicSessionReader(options),
-    new LeagueClientStatusService(new LeagueClientLocator(), options.LeagueLockfilePath));
+    new LeagueClientStatusService(new LeagueClientLocator(), options.LeagueLockfilePath),
+    stateStore);
 using var shutdown = new CancellationTokenSource();
 var shutdownStarted = 0;
 using var shutdownMonitor = ConsoleShutdownMonitor.Register(ShutdownBridge);
@@ -23,6 +25,7 @@ AppDomain.CurrentDomain.ProcessExit += (_, _) =>
 
 Console.WriteLine("LolStatusMusicBridge started.");
 Console.WriteLine($"Config file: {options.ConfigPath}");
+Console.WriteLine($"Restore state: {stateStore.StateFilePath}");
 Console.WriteLine($"Allowed media apps: {string.Join(", ", options.AllowedSourceApps)}");
 Console.WriteLine($"Polling every {options.PollInterval.TotalSeconds:0} seconds.");
 Console.WriteLine("Press Ctrl+C to stop.");
