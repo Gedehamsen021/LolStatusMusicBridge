@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version
+        required: true
+        default: 1.0.0
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    permissions:
+      contents: write
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            "APP_VERSION=${{ inputs.version }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+          else {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+            "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+
+      - name: Build release zip
+        shell: pwsh
+        run: .\scripts\Publish-Release.ps1 -Version $env:APP_VERSION -RuntimeIdentifier win-x64 -SelfContained
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LolStatusMusicBridge-${{ env.APP_VERSION }}-win-x64
+          path: artifacts/release/*.zip
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/release/*.zip
+          generate_release_notes: true

@@ -1,0 +1,9 @@
+{
+  "statusPrefix": "Escutando",
+  "pollSeconds": 5,
+  "maxStatusLength": 124,
+  "leagueLockfilePath": "C:\\Riot Games\\League of Legends\\lockfile",
+  "allowedSourceApps": [
+    "Spotify"
+  ]
+}

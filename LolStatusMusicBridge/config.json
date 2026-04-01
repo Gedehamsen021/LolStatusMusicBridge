@@ -1,0 +1,9 @@
+{
+  "statusPrefix": "Now playing",
+  "pollSeconds": 5,
+  "maxStatusLength": 124,
+  "leagueLockfilePath": null,
+  "allowedSourceApps": [
+    "Spotify"
+  ]
+}
