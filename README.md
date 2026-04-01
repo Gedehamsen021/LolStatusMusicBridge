@@ -53,16 +53,6 @@ dotnet build .\LolStatusMusicBridge\LolStatusMusicBridge.csproj
 dotnet run --project .\LolStatusMusicBridge\LolStatusMusicBridge.csproj
 ```
 
-## Create A Release Zip
-
-Use the included script:
-
-```powershell
-.\scripts\Publish-Release.ps1 -Version 1.0.0 -RuntimeIdentifier win-x64 -SelfContained
-```
-
-That produces a ready-to-upload zip in `artifacts\release`.
-
 ## GitHub Actions
 
 The repo includes a workflow at `.github/workflows/release.yml`.
